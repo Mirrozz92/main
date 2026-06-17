@@ -12,7 +12,10 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, LargeBinary, Numeric, String, Text
+from sqlalchemy import (
+    JSON, BigInteger, Boolean, DateTime, ForeignKey,
+    Index, Integer, LargeBinary, Numeric, String, Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.db.base import Base, TimestampMixin
@@ -63,7 +66,6 @@ class Publisher(Base, TimestampMixin):
     rating_calculated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    # Total verified subs across all time (volume score for rating)
     verified_subs_total: Mapped[int] = mapped_column(
         BigInteger, nullable=False, default=0, server_default="0"
     )
@@ -90,10 +92,7 @@ class Publisher(Base, TimestampMixin):
 
 
 class PublisherBot(Base, TimestampMixin):
-    """A bot owned by a Publisher — the unit of integration with FastSub.
-
-    Each PublisherBot has its own API token, settings, and statistics.
-    """
+    """A bot owned by a Publisher — the unit of integration with FastSub."""
 
     __tablename__ = "publisher_bots"
 
@@ -106,43 +105,41 @@ class PublisherBot(Base, TimestampMixin):
         index=True,
     )
 
-    # Human-readable name (always required; visible in publisher's UI)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
 
-    # Optional: real Telegram bot identity (filled if user provided TG bot token)
     tg_bot_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
     tg_bot_username: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # Bot Token encrypted with Fernet; raw bytes
     tg_bot_token_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 
     # Settings
     sponsors_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1",
-        comment="How many sponsors to issue per request-op call (1..10)",
     )
     list_ttl_seconds: Mapped[int] = mapped_column(
         Integer, nullable=False, default=3600, server_default="3600",
-        comment="Sponsor list TTL in seconds (300..604800, default 1h)",
     )
 
-    # Moderation (added in migration 0009)
+    # Moderation (migration 0009)
     is_moderated: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false",
-        comment="True if moderator approved this bot",
     )
+    niche: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    age_audience: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    gender_audience: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    country_audience: Mapped[Any] = mapped_column(JSON, nullable=True)
+    moderated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    moderated_by_tg_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    moderation_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Extra publisher-side settings (added in migration 0010)
+    # Publisher-side settings (migration 0010)
     get_links: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false",
-        comment="True = return links via API; False = send OP block ourselves",
     )
     show_quiz: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false",
-        comment="Show onboarding quiz to end users for targeting",
     )
     excluded_themes: Mapped[Any] = mapped_column(
         JSON, nullable=False, default=list, server_default="[]",
-        comment="Ad themes excluded from this bot (JSON array of strings)",
     )
 
     # Status
@@ -150,16 +147,10 @@ class PublisherBot(Base, TimestampMixin):
         Boolean, nullable=False, default=True, server_default="true"
     )
 
-    # Aggregated stats (могут обновляться триггерами/cron'ом в этапах 3c-3d)
-    total_requests: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, default=0, server_default="0"
-    )
-    total_issued: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, default=0, server_default="0"
-    )
-    total_verified: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, default=0, server_default="0"
-    )
+    # Aggregated stats
+    total_requests: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    total_issued: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    total_verified: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
     total_earned_rub: Mapped[Decimal] = mapped_column(
         Numeric(18, 4), nullable=False, default=Decimal("0"), server_default="0"
     )
@@ -171,6 +162,8 @@ class PublisherBot(Base, TimestampMixin):
 
     __table_args__ = (
         Index("ix_publisher_bots_active", "is_active", "publisher_id"),
+        Index("ix_publisher_bots_niche", "niche"),
+        Index("ix_publisher_bots_moderated", "is_moderated"),
     )
 
     def __repr__(self) -> str:
@@ -178,11 +171,7 @@ class PublisherBot(Base, TimestampMixin):
 
 
 class PublisherApiToken(Base, TimestampMixin):
-    """API token, attached to a PublisherBot.
-
-    Each PublisherBot has exactly one ACTIVE token at a time.
-    Regenerating creates a new active token and revokes the old one.
-    """
+    """API token, attached to a PublisherBot."""
 
     __tablename__ = "publisher_api_tokens"
 
@@ -194,7 +183,6 @@ class PublisherApiToken(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    # Nullable for backwards compat (migration sets this on existing rows)
     publisher_bot_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("publisher_bots.id", ondelete="CASCADE"),
