@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cd \"c:\\\\Users\\\\sigma\\\\Downloads\\\\fastsub-main\"; $env:PYTHONPATH = \".\"; python -c \"import ast; ast.parse\\(open\\('src/bots/main/middlewares.py'\\).read\\(\\)\\); print\\('middlewares syntax ok'\\)\")"
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fastsub_test
+          POSTGRES_PASSWORD: fastsub_test
+          POSTGRES_DB: fastsub_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fastsub_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ENV: test
+      PYTHONPATH: ${{ github.workspace }}
+      # Integration tests run their migrations against this throwaway database.
+      TEST_DATABASE_URL: postgresql+asyncpg://fastsub_test:fastsub_test@localhost:5432/fastsub_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Ruff (lint)
+        run: ruff check src tests
+
+      - name: Tests
+        run: pytest -q
+
+      # Strict on business layers; aiogram handlers (src/bots) run under a lenient
+      # override (see pyproject) that suppresses framework-stub noise but keeps
+      # structural checks.
+      - name: Mypy
+        run: mypy src
