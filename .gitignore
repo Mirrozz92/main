@@ -50,3 +50,6 @@ backups/
 # --- Dev artifacts ---
 *.zip
 STAGE_*_APPLY.md
+
+# Claude Code local workspace
+.claude/
